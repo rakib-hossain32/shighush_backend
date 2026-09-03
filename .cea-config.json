@@ -1,0 +1,18 @@
+{
+  "name": "shighush_backend",
+  "language": "typescript",
+  "template": "typescript/mongodb-mongoose",
+  "database": "MongoDB",
+  "orm": "mongoose",
+  "structure": "standard",
+  "includesCommon": true,
+  "folders": {
+    "config": "src/config",
+    "controllers": "src/controllers",
+    "middleware": "src/middleware",
+    "models": "src/models",
+    "routes": "src/routes",
+    "services": "src/services",
+    "utils": "src/utils"
+  }
+}
