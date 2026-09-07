@@ -123,6 +123,7 @@ export const listReports = async (
 
 		const [reports, total] = await Promise.all([
 			Report.find(filters)
+				.populate('institutionId', 'slug nameBn category')
 				.sort({ createdAt: -1 })
 				.skip(skip)
 				.limit(limit)
@@ -131,16 +132,42 @@ export const listReports = async (
 			Report.countDocuments(filters),
 		]);
 
-		res.json({
-			success: true,
-			data: {
-				reports,
-				pagination: {
-					page,
-					limit,
-					total,
-					pages: Math.ceil(total / limit),
+		// Transform reports to ensure consistent structure
+		const transformedReports = reports.map((report: any) => {
+			const institutionData = report.institutionId && typeof report.institutionId === 'object'
+				? {
+						id: report.institutionId._id?.toString() || '',
+						nameBn: report.institutionId.nameBn || report.institutionName || 'অজানা প্রতিষ্ঠান',
+						slug: report.institutionId.slug || '',
+					}
+				: {
+						id: '',
+						nameBn: report.institutionName || 'অজানা প্রতিষ্ঠান',
+						slug: '',
+					};
+
+			return {
+				...report,
+				id: report._id.toString(),
+				publicId: report.caseId || '',
+				institution: institutionData,
+				location: {
+					area: report.area || '',
 				},
+				submittedAt: report.createdAt?.toISOString() || new Date().toISOString(),
+				publishedAt: report.publishedAt?.toISOString() || '',
+				updatedAt: report.updatedAt?.toISOString() || new Date().toISOString(),
+			};
+		});
+
+		// Return in ApiListResponse format
+		res.json({
+			data: transformedReports,
+			meta: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
 			},
 		});
 	} catch (err) {
@@ -175,9 +202,35 @@ export const getReportByCaseId = async (
 			throw new ApiError(Constants.HTTP_STATUS.NOT_FOUND, 'Report not found');
 		}
 
+		// Transform report to ensure consistent structure
+		const reportData: any = report;
+		const institutionData = reportData.institutionId && typeof reportData.institutionId === 'object'
+			? {
+					id: reportData.institutionId._id?.toString() || '',
+					nameBn: reportData.institutionId.nameBn || reportData.institutionName || 'অজানা প্রতিষ্ঠান',
+					slug: reportData.institutionId.slug || '',
+				}
+			: {
+					id: '',
+					nameBn: reportData.institutionName || 'অজানা প্রতিষ্ঠান',
+					slug: '',
+				};
+
+		const transformedReport = {
+			...reportData,
+			id: reportData._id.toString(),
+			publicId: reportData.caseId || '',
+			institution: institutionData,
+			location: {
+				area: reportData.area || '',
+			},
+			submittedAt: reportData.createdAt?.toISOString() || new Date().toISOString(),
+			publishedAt: reportData.publishedAt?.toISOString() || '',
+			updatedAt: reportData.updatedAt?.toISOString() || new Date().toISOString(),
+		};
+
 		res.json({
-			success: true,
-			data: report,
+			data: transformedReport,
 		});
 	} catch (err) {
 		next(err);
@@ -227,9 +280,13 @@ export const updateReportStatus = async (
 			userAgent: req.get('user-agent'),
 		});
 
+		// Transform response
+		const reportData = report.toObject();
 		res.json({
-			success: true,
-			data: report,
+			data: {
+				...reportData,
+				id: reportData._id.toString(),
+			},
 		});
 	} catch (err) {
 		next(err);
@@ -281,9 +338,79 @@ export const redactReport = async (
 			userAgent: req.get('user-agent'),
 		});
 
+		// Transform response
+		const reportData = report.toObject();
 		res.json({
-			success: true,
-			data: report,
+			data: {
+				...reportData,
+				id: reportData._id.toString(),
+			},
+		});
+	} catch (err) {
+		next(err);
+	}
+};
+
+/**
+ * Get report by ID (ADMIN/MODERATOR for moderation)
+ */
+export const getReportById = async (
+	req: Request,
+	res: Response,
+	next: NextFunction
+) => {
+	try {
+		const { id } = req.params;
+		const authReq = req as AuthRequest;
+		const isAdmin = !!authReq.user;
+
+		const report = await Report.findById(id)
+			.populate('institutionId', 'slug nameBn category')
+			.select(isAdmin ? '' : '-piiFindings -reviewedBy')
+			.lean();
+
+		if (!report) {
+			throw new ApiError(Constants.HTTP_STATUS.NOT_FOUND, 'Report not found');
+		}
+
+		// Transform report to ensure consistent structure
+		const reportData: any = report;
+		const institutionData = reportData.institutionId && typeof reportData.institutionId === 'object'
+			? {
+					id: reportData.institutionId._id?.toString() || '',
+					nameBn: reportData.institutionId.nameBn || reportData.institutionName || 'অজানা প্রতিষ্ঠান',
+					slug: reportData.institutionId.slug || '',
+				}
+			: {
+					id: '',
+					nameBn: reportData.institutionName || 'অজানা প্রতিষ্ঠান',
+					slug: '',
+				};
+
+		const transformedReport = {
+			...reportData,
+			id: reportData._id.toString(),
+			publicId: reportData.caseId || '',
+			title: reportData.narrative?.substring(0, 100) || 'শিরোনাম নেই',
+			summary: reportData.narrative?.substring(0, 200) || '',
+			rawNarrative: reportData.narrative || '',
+			institution: institutionData,
+			location: {
+				area: reportData.area || '',
+			},
+			piiFindings: reportData.piiFindings || [],
+			moderatorNotes: [],
+			evidence: [],
+			slug: reportData.caseId || '',
+			narrative: reportData.narrative || '',
+			submittedAt: reportData.createdAt?.toISOString() || new Date().toISOString(),
+			publishedAt: reportData.publishedAt?.toISOString() || '',
+			updatedAt: reportData.updatedAt?.toISOString() || new Date().toISOString(),
+			verificationLevel: reportData.verificationLevel || 'unverified',
+		};
+
+		res.json({
+			data: transformedReport,
 		});
 	} catch (err) {
 		next(err);

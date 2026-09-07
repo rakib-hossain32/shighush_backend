@@ -3,6 +3,7 @@ import {
 	createReport,
 	listReports,
 	getReportByCaseId,
+	getReportById,
 	updateReportStatus,
 	redactReport,
 } from '@/controllers/report.controller';
@@ -13,7 +14,8 @@ const router = Router();
 // Public routes
 router.post('/', createReport);
 router.get('/', listReports); // Public gets only published
-router.get('/:caseId', getReportByCaseId);
+router.get('/case/:caseId', getReportByCaseId); // By case ID (শি-০০১)
+router.get('/:id', getReportById); // By MongoDB ID
 
 // Protected routes
 router.patch(

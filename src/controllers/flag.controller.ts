@@ -105,16 +105,24 @@ export const listFlags = async (
 			Flag.countDocuments(filters),
 		]);
 
+		// Transform to match frontend expectations
+		const transformedFlags = flags.map((flag: any) => ({
+			id: flag._id.toString(),
+			reportSlug: flag.reportId?.caseId || '',
+			reportTitle: flag.reportId?.narrative?.substring(0, 100) || 'শিরোনাম নেই',
+			reason: flag.reason,
+			detail: flag.details || '',
+			status: flag.status,
+			raisedAt: flag.createdAt.toISOString(),
+		}));
+
 		res.json({
-			success: true,
-			data: {
-				flags,
-				pagination: {
-					page,
-					limit,
-					total,
-					pages: Math.ceil(total / limit),
-				},
+			data: transformedFlags,
+			meta: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
 			},
 		});
 	} catch (err) {

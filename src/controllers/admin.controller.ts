@@ -20,16 +20,21 @@ export const getDashboardStats = async (
 			totalReports,
 			awaitingReview,
 			published,
-			piiAlerts,
+			piiAlertsReports,
 			todayReports,
 		] = await Promise.all([
 			Report.countDocuments(),
 			Report.countDocuments({ status: 'received' }),
 			Report.countDocuments({ status: 'published' }),
-			Report.countDocuments({
+			// Get actual reports with PII findings, not just count
+			Report.find({
 				piiFindings: { $exists: true, $ne: [] },
 				status: { $in: ['received', 'under_review'] },
-			}),
+			})
+				.populate('institutionId', 'nameBn slug')
+				.sort({ createdAt: -1 })
+				.limit(10)
+				.lean(),
 			Report.countDocuments({
 				createdAt: {
 					$gte: new Date(new Date().setHours(0, 0, 0, 0)),
@@ -38,7 +43,6 @@ export const getDashboardStats = async (
 		]);
 
 		res.json({
-			success: true,
 			data: {
 				metrics: [
 					{ key: 'total', label: 'মোট রিপোর্ট', value: totalReports },
@@ -46,7 +50,43 @@ export const getDashboardStats = async (
 					{ key: 'published', label: 'প্রকাশিত', value: published },
 					{ key: 'today', label: 'আজকের', value: todayReports },
 				],
-				piiAlerts,
+				piiAlerts: piiAlertsReports.map((report: any) => {
+					// Safely extract institution data
+					const institutionData = report.institutionId && typeof report.institutionId === 'object'
+						? {
+								id: report.institutionId._id?.toString() || '',
+								nameBn: report.institutionId.nameBn || report.institutionName || 'অজানা প্রতিষ্ঠান',
+								slug: report.institutionId.slug || '',
+							}
+						: {
+								id: '',
+								nameBn: report.institutionName || 'অজানা প্রতিষ্ঠান',
+								slug: '',
+							};
+
+					return {
+						id: report._id.toString(),
+						publicId: report.caseId || '',
+						title: report.narrative?.substring(0, 100) || 'শিরোনাম নেই',
+						summary: report.narrative?.substring(0, 200) || '',
+						category: report.category || 'other',
+						status: report.status || 'received',
+						institution: institutionData,
+						location: {
+							area: report.area || '',
+						},
+						piiFindings: report.piiFindings || [],
+						submittedAt: report.createdAt?.toISOString() || new Date().toISOString(),
+						verificationLevel: report.verificationLevel || 'unverified',
+						rawNarrative: report.narrative || '',
+						moderatorNotes: [],
+						evidence: [],
+						slug: '',
+						narrative: report.narrative || '',
+						publishedAt: report.publishedAt?.toISOString() || '',
+						updatedAt: report.updatedAt?.toISOString() || new Date().toISOString(),
+					};
+				}),
 			},
 		});
 	} catch (err) {
@@ -83,16 +123,22 @@ export const listUsers = async (
 			User.countDocuments(filters),
 		]);
 
+		// Transform users to ensure id field exists
+		const transformedUsers = users.map((user: any) => ({
+			...user,
+			id: user._id.toString(),
+			createdAt: user.createdAt.toISOString(),
+			lastLoginAt: user.lastLoginAt?.toISOString(),
+		}));
+
+		// Return in ApiListResponse format
 		res.json({
-			success: true,
-			data: {
-				users,
-				pagination: {
-					page,
-					limit,
-					total,
-					pages: Math.ceil(total / limit),
-				},
+			data: transformedUsers,
+			meta: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
 			},
 		});
 	} catch (err) {
@@ -154,8 +200,10 @@ export const createUser = async (
 		delete userObj.password;
 
 		res.status(Constants.HTTP_STATUS.CREATED).json({
-			success: true,
-			data: userObj,
+			data: {
+				...userObj,
+				id: userObj._id.toString(),
+			},
 		});
 	} catch (err) {
 		next(err);
@@ -200,9 +248,12 @@ export const updateUserRole = async (
 			userAgent: req.get('user-agent'),
 		});
 
+		const userObj = user.toObject();
 		res.json({
-			success: true,
-			data: user,
+			data: {
+				...userObj,
+				id: userObj._id.toString(),
+			},
 		});
 	} catch (err) {
 		next(err);
@@ -246,16 +297,31 @@ export const listAuditLogs = async (
 			AuditLog.countDocuments(filters),
 		]);
 
+		// Transform logs to ensure proper structure
+		const transformedLogs = logs.map((log: any) => ({
+			id: log._id.toString(),
+			actor: {
+				id: log.userId?._id?.toString() || '',
+				name: log.userId?.name || 'Unknown',
+				role: log.userId?.role || 'Moderator',
+			},
+			action: log.action,
+			target: {
+				type: log.targetType,
+				id: log.targetId,
+			},
+			summary: log.details ? JSON.stringify(log.details) : '',
+			at: log.createdAt.toISOString(),
+		}));
+
+		// Return in ApiListResponse format
 		res.json({
-			success: true,
-			data: {
-				logs,
-				pagination: {
-					page,
-					limit,
-					total,
-					pages: Math.ceil(total / limit),
-				},
+			data: transformedLogs,
+			meta: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
 			},
 		});
 	} catch (err) {

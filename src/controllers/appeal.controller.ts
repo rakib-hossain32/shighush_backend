@@ -104,16 +104,25 @@ export const listAppeals = async (
 			Appeal.countDocuments(filters),
 		]);
 
+		// Transform to match frontend expectations
+		const transformedAppeals = appeals.map((appeal: any) => ({
+			id: appeal._id.toString(),
+			caseId: appeal.caseId || appeal.reportId?.caseId || '',
+			reportSlug: appeal.reportId?.caseId,
+			reason: appeal.reason,
+			detail: appeal.description || '',
+			status: appeal.status,
+			receivedAt: appeal.createdAt.toISOString(),
+			resolvedAt: appeal.resolvedAt?.toISOString(),
+		}));
+
 		res.json({
-			success: true,
-			data: {
-				appeals,
-				pagination: {
-					page,
-					limit,
-					total,
-					pages: Math.ceil(total / limit),
-				},
+			data: transformedAppeals,
+			meta: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
 			},
 		});
 	} catch (err) {

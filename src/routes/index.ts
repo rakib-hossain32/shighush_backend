@@ -8,6 +8,7 @@ import flagRoutes from './flag.routes';
 import personRoutes from './person.routes';
 import adminRoutes from './admin.routes';
 import evidenceRoutes from './evidence.routes';
+import statisticsRoutes from './statistics.routes';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.use('/institutions', institutionRoutes);
 router.use('/appeals', appealRoutes);
 router.use('/flags', flagRoutes);
 router.use('/people', personRoutes);
+router.use('/statistics', statisticsRoutes);
 router.use(evidenceRoutes); // Evidence has its own paths
 
 // Protected routes
